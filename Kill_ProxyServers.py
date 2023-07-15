@@ -9,6 +9,10 @@ ec2 = boto3.resource('ec2',region_name='us-west-1')
 with open('proxy_servers.json') as json_file:
     data = json.load(json_file)
 
+if len(data) == 0:
+    print("No proxies to kill")
+    exit(0)
+
 instance_ids = [i['instance_id'] for i in data]
 ec2.instances.filter(InstanceIds=instance_ids).terminate()
 print(f"Terminated {len(instance_ids)} instances")

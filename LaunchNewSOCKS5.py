@@ -71,19 +71,17 @@ def setup_instance(instance, debug):
 def launch(num_instances, debug=False):
     if debug:
         print("Launching instances...")
-    try:
-        instances = client.run_instances(
-            LaunchTemplate={
-                'LaunchTemplateId': 'lt-0595e64766e1e9cc5'
-            },
-            IamInstanceProfile={
-                'Name': "AmazonSSMRoleForInstancesQuickSetup"
-            },
-            MinCount=1,
-            MaxCount=num_instances
-        )
-    except KeyboardInterrupt:
-        print("Caught KeyboardInterrupt, please terminate the instances...")
+
+    instances = client.run_instances(
+        LaunchTemplate={
+            'LaunchTemplateId': 'lt-0595e64766e1e9cc5'
+        },
+        IamInstanceProfile={
+            'Name': "AmazonSSMRoleForInstancesQuickSetup"
+        },
+        MinCount=1,
+        MaxCount=num_instances
+    )
 
     threads = []
 
