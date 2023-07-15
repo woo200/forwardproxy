@@ -1,7 +1,8 @@
 class NetInterceptor:
-    def setup(self, clientbound_sock, serverbound_sock) -> None:
+    def setup(self, clientbound_sock, serverbound_sock, client_name) -> None:
         self.clientbound_sock = clientbound_sock
         self.serverbound_sock = serverbound_sock
+        self.client_name = client_name
 
         pass
 

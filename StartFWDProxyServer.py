@@ -57,7 +57,7 @@ class ForwardServer:
                     sock2.sendall(data)
                 if stop_event.is_set():
                     break
-            except socket.error as e:
+            except (socket.error, ValueError) as e:
                 stop_event.set()
                 break
             # except Exception as e:
@@ -102,13 +102,15 @@ class ForwardServer:
         
         logger.info(f"[{client_name}] Connected to {self.fwd_addr[0]}:{self.fwd_addr[1]}")
 
+        serverbound_interceptors = []
+        clientbound_interceptors = []
         if len(self.interceptors) > 0:
             logger.info(f"[{client_name}] Starting interceptors...")
 
             active_interceptors = []
             for interceptor in self.interceptors:
                 active_interceptor = interceptor[0](*interceptor[1])
-                active_interceptor.setup(conn, client_sock)
+                active_interceptor.setup(conn, client_sock, client_name)
                 active_interceptors.append(active_interceptor)
             
             serverbound_interceptors = [interceptor.handle_serverbound_chunk for interceptor in active_interceptors]
@@ -221,7 +223,7 @@ def main():
             logger.info(f"Using proxy {proxy['ip']}:{proxy['port']}")            
     
         logger.info("Starting server...")
-        fwd_server = ForwardServer(args.remote_addr, args.remote_port, proxy, [[interceptors.MCHandshakeInterceptor, ("homseparti.aternos.me", 25565)]], args.bind_addr, args.bind_port)
+        fwd_server = ForwardServer(args.remote_addr, args.remote_port, proxy, [[interceptors.MCHandshakeInterceptor, ("play.picraft.cc ", 25565)]], args.bind_addr, args.bind_port)
         fwd_server.start()
     except KeyboardInterrupt as e:
         try:
