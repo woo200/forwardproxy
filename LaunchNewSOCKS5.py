@@ -46,7 +46,7 @@ def setup_instance(instance, debug):
     instance = ec2.Instance(id=instance['InstanceId'])
     if debug:
         print(f"Waiting for instance {instance.id} to start...")
-    instance.wait_until_running()
+    instance.wait_until_running(WaiterConfig={"Delay": 2})
     if debug:
         print(f"Waiting for SSM to be available on instance {instance.id}...")
     wait_for_ssm(ssm_client, instance)
@@ -68,7 +68,7 @@ def setup_instance(instance, debug):
     if debug:
         print(f"Instance {instance.id} started with public IP {public_ip}")
 
-def launch(num_instances, debug=False):
+def launch(num_instances, debug=False, useThreading=True):
     if debug:
         print("Launching instances...")
 
@@ -83,17 +83,22 @@ def launch(num_instances, debug=False):
         MaxCount=num_instances
     )
 
+    
     threads = []
 
     for instance in instances['Instances']:
-        while threading.active_count() > MAX_THREADS:
-            time.sleep(1)
-        thread = threading.Thread(target=setup_instance, args=(instance,debug), daemon=True)
-        threads.append(thread)
-        thread.start()
+        if useThreading:
+            while threading.active_count() > MAX_THREADS:
+                time.sleep(1)
+            thread = threading.Thread(target=setup_instance, args=(instance,debug), daemon=True)
+            threads.append(thread)
+            thread.start()
+        else:
+            setup_instance(instance, debug)
 
-    for thread in threads:
-        thread.join()
+    if useThreading:
+        for thread in threads:
+            thread.join()
 
     if debug:
         for proxy_server in proxy_servers:
@@ -103,15 +108,17 @@ def launch(num_instances, debug=False):
 
     old_proxy_servers = []
     try:
-        with open('proxy_servers.json') as json_file:
-            old_proxy_servers = json.load(json_file)
+        old_proxy_servers = json.load(open('proxy_servers.json'))
     except FileNotFoundError:
         pass
-    proxy_servers_to_write = proxy_servers
+
+    proxy_servers_to_write = []
+    proxy_servers_to_write.extend(proxy_servers)
     proxy_servers_to_write.extend(old_proxy_servers)
 
     if debug:
         print("Writing proxy servers to file...")
+
     with open('proxy_servers.json', 'w') as outfile:
         json.dump(proxy_servers_to_write, outfile)
 

@@ -165,12 +165,12 @@ def main():
     parser = argparse.ArgumentParser(prog="ForwardProxy",
                                      description='Acts as a forward proxy, optional (primary) SOCKS5 transport with automatic EC2 integration for increased anonymity.')
 
-    parser.add_argument('-p', '--proxy', dest='proxy', action='store_false', help='Use a SOCKS5 proxy for the connection to the target server')
+    parser.add_argument('-d', '--disable-proxy', dest='proxy', action='store_false', help='Disable use of a SOCKS5 proxy for the connection to the target server')
     parser.add_argument('remote_addr', metavar='remote_addr', type=str, help='The address of the target server')
     parser.add_argument('remote_port', metavar='remote_port', type=int, help='The port of the target server')
-    parser.add_argument('--bind_addr', metavar='Bind Address', type=str, help='The address to bind the proxy server to', default='0.0.0.0')
-    parser.add_argument('--bind_port', metavar='Bind Port', type=int, help='The port to bind the proxy server to', default=1234)
-    parser.add_argument('-i', '--ideal', dest='ideal', type=int, help='The ideal number of proxies to have available', default=3)
+    parser.add_argument('--bind-addr', metavar='Bind Address', type=str, help='The address to bind the proxy server to', default='0.0.0.0')
+    parser.add_argument('--bind-port', metavar='Bind Port', type=int, help='The port to bind the proxy server to', default=1234)
+    parser.add_argument('-i', '--ideal', dest='ideal', type=int, help='The ideal number of proxies to have available', default=2)
 
     args = parser.parse_args()
 
@@ -187,14 +187,14 @@ def main():
             if len(available_proxies) == 0:
                 logger.warning(f"Proxy deficit detected")
                 spawn_thread = threading.Thread(target=regen_proxies, args=[args.ideal], daemon=True)
-                waitthreads.append(spawn_thread)
+
                 spawn_thread.start()
                 spawn_thread.join()
-                
+
                 available_proxies = load_available_proxies()
             
             if len(available_proxies) < args.ideal:
-                spawn_thread = threading.Thread(target=regen_proxies, args=[1], daemon=True)
+                spawn_thread = threading.Thread(target=regen_proxies, args=[1])
                 waitthreads.append(spawn_thread)
                 spawn_thread.start()
 
@@ -219,8 +219,10 @@ def main():
 
             if args.proxy and proxy:
                 logger.info("Destroying proxy...")
+                available_proxies = load_available_proxies()
                 destroy_proxy(available_proxies, proxy)
         except KeyboardInterrupt as e:
+            print("", end="\r")
             logger.critical("Ctrl+C pressed twice, forcefully shutting down.")
 
 
