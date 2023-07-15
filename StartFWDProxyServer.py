@@ -6,6 +6,7 @@ import boto3
 import random
 import json
 import argparse
+import interceptors
 
 import LaunchNewSOCKS5
 
@@ -14,7 +15,7 @@ from loguru import logger
 ec2 = boto3.resource('ec2',region_name='us-west-1')
 
 class ForwardServer:
-    def __init__(self, fwd_host, fwd_port, proxy=None, host='127.0.0.1', port=1234) -> None:
+    def __init__(self, fwd_host, fwd_port, proxy=None, _interceptors=[], host='127.0.0.1', port=1234) -> None:
         self.proxy_addr = (proxy['ip'], proxy['port']) if proxy else None
         self.proxy_authentication = [sockslib.NoAuth(),
                                      sockslib.UserPassAuth(proxy['username'], proxy['password'])] if proxy else None
@@ -23,6 +24,7 @@ class ForwardServer:
         self.fwd_addr  = (fwd_host, fwd_port)
         
         self.server_socket = None
+        self.interceptors = _interceptors
 
         self.client_threads = []
         self.client_signals = []
@@ -38,7 +40,7 @@ class ForwardServer:
         except:
             pass
 
-    def __forward(self, sock1, sock2, stop_event, client_name):
+    def __forward(self, sock1, sock2, stop_event, client_name, _interceptors=[]):
         sock1.setblocking(False)
 
         while True:
@@ -48,16 +50,20 @@ class ForwardServer:
                     data = sock1.recv(4096)
                     if not data:
                         break
+
+                    for interceptor in _interceptors:
+                        data = interceptor(data)
+
                     sock2.sendall(data)
                 if stop_event.is_set():
                     break
             except socket.error as e:
                 stop_event.set()
                 break
-            except Exception as e:
-                logger.error(f"[{client_name}] Forwarding stopped: {e}")
-                stop_event.set()
-                break
+            # except Exception as e:
+            #     logger.error(f"[{client_name}] Forwarding stopped: {e}")
+            #     stop_event.set()
+            #     break
 
         self.__safe_shutdown(sock1)
         self.__safe_shutdown(sock2)
@@ -96,14 +102,22 @@ class ForwardServer:
         
         logger.info(f"[{client_name}] Connected to {self.fwd_addr[0]}:{self.fwd_addr[1]}")
 
+        if len(self.interceptors) > 0:
+            logger.info(f"[{client_name}] Starting interceptors...")
+            for interceptor in self.interceptors:
+                interceptor.setup(conn, client_sock)
+            
+            serverbound_interceptors = [interceptor.handle_serverbound_chunk for interceptor in self.interceptors]
+            clientbound_interceptors = [interceptor.handle_clientbound_chunk for interceptor in self.interceptors]
+
         stop_event = threading.Event()
         client_thread = threading.Thread(target = self.__forward,
-                                        args    = [conn, client_sock, stop_event, client_name],
+                                        args    = [conn, client_sock, stop_event, client_name, serverbound_interceptors],
                                         daemon  = True)
         client_thread.start()
 
         server_thread = threading.Thread(target = self.__forward,
-                                        args    = [client_sock, conn, stop_event, client_name],
+                                        args    = [client_sock, conn, stop_event, client_name, clientbound_interceptors],
                                         daemon  = True)
         server_thread.start()
 
@@ -203,7 +217,7 @@ def main():
             logger.info(f"Using proxy {proxy['ip']}:{proxy['port']}")            
     
         logger.info("Starting server...")
-        fwd_server = ForwardServer(args.remote_addr, args.remote_port, proxy, args.bind_addr, args.bind_port)
+        fwd_server = ForwardServer(args.remote_addr, args.remote_port, proxy, [interceptors.MCHandshakeInterceptor("localhost", "FroxyCity.aternos.me", 63715)], args.bind_addr, args.bind_port)
         fwd_server.start()
     except KeyboardInterrupt as e:
         try:
