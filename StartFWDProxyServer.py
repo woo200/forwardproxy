@@ -221,7 +221,7 @@ def main():
             logger.info(f"Using proxy {proxy['ip']}:{proxy['port']}")            
     
         logger.info("Starting server...")
-        fwd_server = ForwardServer(args.remote_addr, args.remote_port, proxy, [[interceptors.MCHandshakeInterceptor, ("localhost", "FroxyCity.aternos.me", 63715)]], args.bind_addr, args.bind_port)
+        fwd_server = ForwardServer(args.remote_addr, args.remote_port, proxy, [[interceptors.MCHandshakeInterceptor, ("homseparti.aternos.me", 25565)]], args.bind_addr, args.bind_port)
         fwd_server.start()
     except KeyboardInterrupt as e:
         try:

@@ -1,7 +1,9 @@
 from interceptors.NetInterceptor import NetInterceptor
 import regex as re
 import io
+import uuid
 import struct
+from loguru import logger
 
 class MCProtocolTools:
     @staticmethod
@@ -44,7 +46,7 @@ class MCProtocolTools:
         return length_bytes
 
 class MCHandshakeInterceptor(NetInterceptor):
-    def __init__(self, server_address, replacement_addr, replacement_port) -> None:
+    def __init__(self, replacement_addr, replacement_port) -> None:
         self.serverbound_patterns = [
             {
                 "packet_id": 0x00,
@@ -78,20 +80,25 @@ class MCHandshakeInterceptor(NetInterceptor):
         username_len, dl1 = MCProtocolTools.readVarInt(packet_iostream)
         username = packet_iostream.read(username_len).decode("utf-8")
         has_uuid, = packet_iostream.read(1)
-        uuid = None
+        player_uuid = None
         
         if has_uuid == 0x01:
-            uuid = packet_iostream.read(16)
+            player_uuid = packet_iostream.read(16)
         
         if len(dl1) + username_len + 1 + (16 if has_uuid == 0x01 else 0) != packet_len:
             return False, None
         
+        uuid_str = ""
+        if has_uuid == 0x01:
+            uuid_str = f" [{str(uuid.UUID(bytes=player_uuid))}]"
+        logger.info(f"Player {username}{uuid_str} has sent login packet")
+
         # rebuild packet
         MCProtocolTools.writeVarInt(pb, username_len)
         pb.write(username.encode("utf-8"))
         pb.write(bytes([has_uuid]))
         if has_uuid == 0x01:
-            pb.write(uuid)
+            pb.write(player_uuid)
         
         return True, self.__generate_packet_with_header(0x00, pb.getvalue())
 
@@ -136,13 +143,21 @@ class MCHandshakeInterceptor(NetInterceptor):
         totaldata = b""
 
         while True:
-            packet_length, _ = MCProtocolTools.readVarInt(packet_)
-            packet_id, = packet_.read(1)
+            try:
+                packet_length, _ = MCProtocolTools.readVarInt(packet_)
+                packet_id, = packet_.read(1)
+            except: # invalid packet, stop processing
+                return packet
+            
             packet_identified = False
 
             for pattern in self.serverbound_patterns:
                 if pattern["packet_id"] == packet_id: # subpacket identified
-                    valid_packet, new_packet = pattern["handler"](packet_length - 1, packet_, packet)
+                    try:
+                        valid_packet, new_packet = pattern["handler"](packet_length - 1, packet_, packet)
+                    except Exception as e:
+                        logger.error(f"Error while handling packet {packet_id}: {e}")
+                        return packet # (probably) invalid subpacket, stop processing
                     
                     if not valid_packet: # invalid subpacket, stop processing
                         return packet
