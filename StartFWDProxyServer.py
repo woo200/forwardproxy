@@ -104,11 +104,15 @@ class ForwardServer:
 
         if len(self.interceptors) > 0:
             logger.info(f"[{client_name}] Starting interceptors...")
+
+            active_interceptors = []
             for interceptor in self.interceptors:
-                interceptor.setup(conn, client_sock)
+                active_interceptor = interceptor[0](*interceptor[1])
+                active_interceptor.setup(conn, client_sock)
+                active_interceptors.append(active_interceptor)
             
-            serverbound_interceptors = [interceptor.handle_serverbound_chunk for interceptor in self.interceptors]
-            clientbound_interceptors = [interceptor.handle_clientbound_chunk for interceptor in self.interceptors]
+            serverbound_interceptors = [interceptor.handle_serverbound_chunk for interceptor in active_interceptors]
+            clientbound_interceptors = [interceptor.handle_clientbound_chunk for interceptor in active_interceptors]
 
         stop_event = threading.Event()
         client_thread = threading.Thread(target = self.__forward,
@@ -217,7 +221,7 @@ def main():
             logger.info(f"Using proxy {proxy['ip']}:{proxy['port']}")            
     
         logger.info("Starting server...")
-        fwd_server = ForwardServer(args.remote_addr, args.remote_port, proxy, [interceptors.MCHandshakeInterceptor("localhost", "FroxyCity.aternos.me", 63715)], args.bind_addr, args.bind_port)
+        fwd_server = ForwardServer(args.remote_addr, args.remote_port, proxy, [[interceptors.MCHandshakeInterceptor, ("localhost", "FroxyCity.aternos.me", 63715)]], args.bind_addr, args.bind_port)
         fwd_server.start()
     except KeyboardInterrupt as e:
         try:
